@@ -1,5 +1,7 @@
 import cv2
 import mediapipe as mp
+import numpy as np
+import os
 
 class FingerCounter:
     def __init__(self):
@@ -10,7 +12,41 @@ class FingerCounter:
             min_tracking_confidence=0.5
         )
         self.mp_draw = mp.solutions.drawing_utils
-        
+        self.camera = None
+        self.is_camera_available = False
+        self.initialize_camera()
+
+    def initialize_camera(self):
+        try:
+            # Try to initialize camera
+            self.camera = cv2.VideoCapture(0)
+            if not self.camera.isOpened():
+                raise ValueError("Could not open camera")
+            self.is_camera_available = True
+        except Exception as e:
+            print(f"Camera initialization failed: {str(e)}")
+            self.is_camera_available = False
+            
+    def get_frame(self):
+        if not self.is_camera_available:
+            # Return a blank frame with error message if camera is not available
+            frame = np.zeros((480, 640, 3), dtype=np.uint8)
+            cv2.putText(
+                frame,
+                "Camera not available",
+                (120, 240),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                1,
+                (255, 255, 255),
+                2
+            )
+            return frame
+            
+        ret, frame = self.camera.read()
+        if not ret:
+            return self.get_frame()  # Recursively try again or return blank frame
+        return frame
+
     def count_fingers(self, hand_landmarks, handedness):
         tip_ids = [4, 8, 12, 16, 20]
         fingers = []
@@ -37,6 +73,10 @@ class FingerCounter:
         return fingers.count(1)
 
     def process_frame(self, frame):
+        # If we're getting a None frame, return a blank one
+        if frame is None:
+            return self.get_frame()
+            
         image = cv2.flip(frame, 1)
         image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         results = self.hands.process(image_rgb)
