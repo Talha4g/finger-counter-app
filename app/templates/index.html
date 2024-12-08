@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gesture Recognition System</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            background-color: #f5f5f5;
+        }
+
+        .navbar {
+            background-color: #2C3E50;
+            padding: 1rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .nav-content {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            color: white;
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+        }
+
+        .nav-links a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+
+        .nav-links a:hover {
+            background-color: #34495E;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 2rem;
+            align-items: start;
+        }
+
+        .video-section {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        .video-container {
+            width: 100%;
+            aspect-ratio: 4/3;
+            background-color: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            margin-bottom: 1rem;
+        }
+
+        #video_feed {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .instructions {
+            background: white;
+            padding: 1.5rem;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1, h2 {
+            color: #2C3E50;
+            margin-bottom: 1rem;
+        }
+
+        .instruction-list {
+            list-style-position: inside;
+            padding-left: 1rem;
+        }
+
+        .instruction-list li {
+            margin-bottom: 0.8rem;
+            color: #444;
+        }
+
+        .status {
+            margin-top: 1rem;
+            padding: 1rem;
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            font-weight: 500;
+            color: #2C3E50;
+            text-align: center;
+        }
+
+        footer {
+            background-color: #2C3E50;
+            color: white;
+            text-align: center;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .developer-info {
+            font-size: 1.1rem;
+            margin-top: 0.5rem;
+            color: #ecf0f1;
+        }
+
+        .developer-name {
+            font-weight: bold;
+            color: #3498db;
+        }
+
+        @media (max-width: 768px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+            
+            .nav-content {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .nav-links {
+                flex-direction: column;
+                align-items: center;
+                gap: 0.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="nav-content">
+            <a href="/" class="logo">Gesture Recognition System</a>
+            <div class="nav-links">
+                <a href="/">Home</a>
+                <a href="#instructions">Instructions</a>
+                <a href="#about">About</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="main-content">
+            <div class="video-section">
+                <h1>Real-time Hand Gesture Detection</h1>
+                <div class="video-container">
+                    <img id="video_feed" src="{{ url_for('video_feed') }}" alt="Video feed">
+                </div>
+                <div class="status">
+                    Show your hands to the camera to count fingers
+                </div>
+            </div>
+
+            <div class="instructions" id="instructions">
+                <h2>How to Use</h2>
+                <ul class="instruction-list">
+                    <li>Allow camera access when prompted</li>
+                    <li>Position yourself in front of the camera</li>
+                    <li>Show one or both hands clearly</li>
+                    <li>Keep your hands within the frame</li>
+                    <li>The system will detect and count fingers for each hand</li>
+                    <li>Numbers will appear on screen showing the count</li>
+                </ul>
+
+                <h2 style="margin-top: 2rem">Tips for Best Results</h2>
+                <ul class="instruction-list">
+                    <li>Ensure good lighting in your environment</li>
+                    <li>Keep your hands about 1-2 feet from the camera</li>
+                    <li>Avoid rapid hand movements</li>
+                    <li>Make sure your fingers are clearly separated</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>Gesture Recognition System © 2024</p>
+        <p class="developer-info">Developed by <span class="developer-name">Talah Tanveer</span></p>
+    </footer>
+</body>
+</html>
