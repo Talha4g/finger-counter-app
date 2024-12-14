@@ -1,12 +1,14 @@
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, jsonify, request
+from flask_cors import CORS
 import cv2
 import mediapipe as mp
 import numpy as np
-import time
+import base64
 import os
 from waitress import serve
 
 app = Flask(__name__)
+CORS(app)
 
 # Configure for production
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
@@ -73,14 +75,14 @@ class FingerCounter:
                     # Position text based on hand
                     text_x = 50 if handedness.classification[0].label == 'Left' else image.shape[1] - 250
                     
-                    # Draw count for each hand with outline
+                    # Draw count for each hand
                     label = f'{handedness.classification[0].label}: {finger_count}'
                     cv2.putText(image, label, (text_x, 50 + idx * 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
                     cv2.putText(image, label, (text_x, 50 + idx * 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
                 
-                # Draw total count with outline
+                # Draw total count
                 total_text = f'Total Fingers: {total_fingers}'
                 cv2.putText(image, total_text, (image.shape[1]//2 - 100, 100), 
                           cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
@@ -95,65 +97,45 @@ class FingerCounter:
 
 counter = FingerCounter()
 
-def get_camera():
-    try:
-        cap = cv2.VideoCapture(0)
-        if cap.isOpened():
-            cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-            cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-            cap.set(cv2.CAP_PROP_FPS, 30)
-            return cap
-    except Exception as e:
-        print(f"Camera error: {e}")
-    return None
-
-camera = None
-
-def generate_frames():
-    global camera
-    
-    while True:
-        try:
-            if camera is None:
-                camera = get_camera()
-                if camera is None:
-                    frame = np.zeros((480, 640, 3), dtype=np.uint8)
-                    cv2.putText(frame, "Camera not available", (200, 240),
-                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                    ret, buffer = cv2.imencode('.jpg', frame)
-                    frame = buffer.tobytes()
-                    yield (b'--frame\r\n'
-                           b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-                    time.sleep(1)
-                    continue
-
-            success, frame = camera.read()
-            if not success:
-                raise Exception("Failed to read camera frame")
-
-            frame = cv2.resize(frame, (640, 480))
-            processed_frame = counter.process_frame(frame)
-            ret, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-            frame = buffer.tobytes()
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-
-        except Exception as e:
-            print(f"Stream error: {e}")
-            time.sleep(0.1)
-            continue
-
-    if camera is not None:
-        camera.release()
-
 @app.route('/')
 def index():
     return render_template('index.html')
 
-@app.route('/video_feed')
-def video_feed():
-    return Response(generate_frames(), 
-                    mimetype='multipart/x-mixed-replace; boundary=frame')
+@app.route('/process_frame', methods=['POST'])
+def process_frame():
+    try:
+        if not request.json or 'image' not in request.json:
+            return jsonify({'error': 'No image data received'}), 400
+
+        # Get the image data from the request
+        image_data = request.json['image']
+        if not image_data:
+            return jsonify({'error': 'Empty image data'}), 400
+
+        try:
+            image_data = image_data.split(',')[1]
+        except IndexError:
+            return jsonify({'error': 'Invalid image data format'}), 400
+
+        try:
+            image_bytes = base64.b64decode(image_data)
+        except Exception as e:
+            return jsonify({'error': f'Base64 decode error: {str(e)}'}), 400
+
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        
+        if frame is None:
+            return jsonify({'error': 'Could not decode image'}), 400
+
+        processed_frame = counter.process_frame(frame)
+        ret, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+        processed_image = base64.b64encode(buffer).decode('utf-8')
+        
+        return jsonify({'image': f'data:image/jpeg;base64,{processed_image}'})
+    except Exception as e:
+        print(f"Error processing frame: {e}")
+        return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
 def health():

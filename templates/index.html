@@ -139,60 +139,149 @@
             const permissionButton = document.getElementById('permission-button');
             const errorMessage = document.getElementById('error-message');
 
-            let retryCount = 0;
-            const maxRetries = 3;
+            let stream = null;
+            let videoElement = null;
+            let canvas = document.createElement('canvas');
+            let processingFrame = false;
 
             async function initializeCamera() {
+                console.log('Initializing camera...');
                 try {
-                    const stream = await navigator.mediaDevices.getUserMedia({ 
+                    console.log('Requesting camera access...');
+                    stream = await navigator.mediaDevices.getUserMedia({ 
                         video: {
                             width: { ideal: 640 },
                             height: { ideal: 480 }
                         }
                     });
+                    console.log('Camera access granted!');
                     
-                    stream.getTracks().forEach(track => track.stop());
+                    videoElement = document.createElement('video');
+                    videoElement.srcObject = stream;
+                    videoElement.autoplay = true;
                     
-                    permissionScreen.style.display = 'none';
-                    videoContainer.style.display = 'block';
-                    errorMessage.style.display = 'none';
-                    
-                    videoFeed.src = "{{ url_for('video_feed') }}";
+                    videoElement.addEventListener('loadedmetadata', () => {
+                        console.log('Video element metadata loaded');
+                        videoElement.play()
+                            .then(() => {
+                                console.log('Video element started playing');
+                                permissionScreen.style.display = 'none';
+                                videoContainer.style.display = 'block';
+                                errorMessage.style.display = 'none';
+                                processFrames();
+                            })
+                            .catch(err => {
+                                console.error('Error playing video:', err);
+                                throw err;
+                            });
+                    });
 
                 } catch (err) {
-                    console.error('Error accessing camera:', err);
-                    errorMessage.textContent = 'Camera access denied. Please allow camera access and try again.';
+                    console.error('Camera initialization error:', err);
+                    errorMessage.textContent = `Camera access error: ${err.message}`;
                     errorMessage.style.display = 'block';
-                    permissionButton.textContent = 'Retry Camera Access';
-                    
-                    if (retryCount >= maxRetries) {
-                        permissionButton.disabled = true;
-                        errorMessage.textContent = 'Maximum retry attempts reached. Please refresh the page to try again.';
-                    }
-                    retryCount++;
                 }
             }
 
-            permissionButton.addEventListener('click', initializeCamera);
+            async function processFrames() {
+                console.log('Starting frame processing...');
+                if (!videoElement) {
+                    console.error('No video element available');
+                    return;
+                }
 
-            videoFeed.addEventListener('error', function() {
-                errorMessage.textContent = 'Error loading video feed. Please refresh the page.';
-                errorMessage.style.display = 'block';
-                videoContainer.style.display = 'none';
-                permissionScreen.style.display = 'block';
-            });
+                canvas.width = videoElement.videoWidth;
+                canvas.height = videoElement.videoHeight;
+                const ctx = canvas.getContext('2d');
 
-            // Handle page visibility change
-            document.addEventListener('visibilitychange', function() {
-                if (document.hidden) {
-                    if (videoFeed.src) {
-                        videoFeed.src = '';
+                async function sendFrame() {
+                    if (processingFrame) return;
+                    processingFrame = true;
+
+                    try {
+                        ctx.drawImage(videoElement, 0, 0);
+                        const imageData = canvas.toDataURL('image/jpeg', 0.8);
+
+                        console.log('Sending frame to server...');
+                        const response = await fetch('/process_frame', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                            },
+                            body: JSON.stringify({ image: imageData })
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            if (data.image) {
+                                videoFeed.src = data.image;
+                                console.log('Frame processed successfully');
+                            } else {
+                                console.error('No image data in response');
+                            }
+                        } else {
+                            console.error('Server response not OK:', response.status);
+                        }
+                    } catch (error) {
+                        console.error('Frame processing error:', error);
+                    } finally {
+                        processingFrame = false;
                     }
-                } else {
-                    if (videoContainer.style.display === 'block') {
-                        videoFeed.src = "{{ url_for('video_feed') }}";
+
+                    if (stream && videoElement.readyState === videoElement.HAVE_ENOUGH_DATA) {
+                        requestAnimationFrame(sendFrame);
                     }
                 }
+
+                sendFrame();
+            }
+
+            permissionButton.addEventListener('click', () => {
+                console.log('Permission button clicked');
+                initializeCamera().catch(err => {
+                    console.error('Camera initialization failed:', err);
+                    errorMessage.textContent = 'Failed to initialize camera. Please try again.';
+                    errorMessage.style.display = 'block';
+                });
+            });
+
+            window.addEventListener('beforeunload', () => {
+                if (stream) {
+                    console.log('Cleaning up camera resources...');
+                    stream.getTracks().forEach(track => track.stop());
+                }
+            });
+
+            document.addEventListener('visibilitychange', () => {
+                console.log('Page visibility changed:', document.hidden);
+                if (document.hidden) {
+                    if (stream) {
+                        console.log('Stopping camera on page hide');
+                        stream.getTracks().forEach(track => track.stop());
+                        stream = null;
+                        videoElement = null;
+                    }
+                } else {
+                    if (!stream && videoContainer.style.display === 'block') {
+                        console.log('Reinitializing camera on page show');
+                        initializeCamera();
+                    }
+                }
+            });
+
+            // Reinitialize camera when returning to the page
+            window.addEventListener('focus', () => {
+                if (!stream && videoContainer.style.display === 'block') {
+                    console.log('Reinitializing camera on window focus');
+                    initializeCamera();
+                }
+            });
+
+            // Handle errors on the video feed element
+            videoFeed.addEventListener('error', () => {
+                console.error('Error with video feed');
+                errorMessage.textContent = 'Error with video feed. Please refresh the page.';
+                errorMessage.style.display = 'block';
             });
         });
     </script>
