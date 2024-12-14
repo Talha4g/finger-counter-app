@@ -10,7 +10,6 @@ from waitress import serve
 app = Flask(__name__)
 CORS(app)
 
-# Configure for production
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'your-secret-key-here')
 app.config['DEBUG'] = False
 
@@ -18,9 +17,10 @@ class FingerCounter:
     def __init__(self):
         self.mp_hands = mp.solutions.hands
         self.hands = self.mp_hands.Hands(
-            max_num_hands=2,
-            min_detection_confidence=0.5,
-            min_tracking_confidence=0.5
+            max_num_hands=1,  # Reduced to 1 hand
+            min_detection_confidence=0.7,
+            min_tracking_confidence=0.5,
+            model_complexity=0  # Using simpler model
         )
         self.mp_draw = mp.solutions.drawing_utils
         
@@ -55,8 +55,6 @@ class FingerCounter:
             image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             results = self.hands.process(image_rgb)
             
-            total_fingers = 0
-            
             if results.multi_hand_landmarks:
                 for idx, (hand_landmarks, handedness) in enumerate(zip(results.multi_hand_landmarks, results.multi_handedness)):
                     # Draw hand landmarks
@@ -70,24 +68,23 @@ class FingerCounter:
                     
                     # Count fingers
                     finger_count = self.count_fingers(hand_landmarks, handedness)
-                    total_fingers += finger_count
                     
                     # Position text based on hand
                     text_x = 50 if handedness.classification[0].label == 'Left' else image.shape[1] - 250
                     
-                    # Draw count for each hand
+                    # Draw count with outline
                     label = f'{handedness.classification[0].label}: {finger_count}'
-                    cv2.putText(image, label, (text_x, 50 + idx * 50), 
+                    cv2.putText(image, label, (text_x, 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
-                    cv2.putText(image, label, (text_x, 50 + idx * 50), 
+                    cv2.putText(image, label, (text_x, 50), 
                               cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                
-                # Draw total count
-                total_text = f'Total Fingers: {total_fingers}'
-                cv2.putText(image, total_text, (image.shape[1]//2 - 100, 100), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
-                cv2.putText(image, total_text, (image.shape[1]//2 - 100, 100), 
-                          cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    
+                    # Draw total count
+                    total_text = f'Total Fingers: {finger_count}'
+                    cv2.putText(image, total_text, (image.shape[1]//2 - 100, 100), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 3)
+                    cv2.putText(image, total_text, (image.shape[1]//2 - 100, 100), 
+                              cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
             
             return image
             
@@ -113,28 +110,31 @@ def process_frame():
             return jsonify({'error': 'Empty image data'}), 400
 
         try:
+            # Reduce image size before processing
             image_data = image_data.split(',')[1]
-        except IndexError:
-            return jsonify({'error': 'Invalid image data format'}), 400
-
-        try:
             image_bytes = base64.b64decode(image_data)
+            nparr = np.frombuffer(image_bytes, np.uint8)
+            frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            
+            # Resize frame to reduce memory usage
+            frame = cv2.resize(frame, (320, 240))
+            
+            # Process the frame
+            processed_frame = counter.process_frame(frame)
+            
+            # Compress more aggressively
+            encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 60]
+            ret, buffer = cv2.imencode('.jpg', processed_frame, encode_param)
+            processed_image = base64.b64encode(buffer).decode('utf-8')
+            
+            return jsonify({'image': f'data:image/jpeg;base64,{processed_image}'})
+            
         except Exception as e:
-            return jsonify({'error': f'Base64 decode error: {str(e)}'}), 400
+            print(f"Frame processing error: {e}")
+            return jsonify({'error': 'Frame processing failed'}), 500
 
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-        
-        if frame is None:
-            return jsonify({'error': 'Could not decode image'}), 400
-
-        processed_frame = counter.process_frame(frame)
-        ret, buffer = cv2.imencode('.jpg', processed_frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-        processed_image = base64.b64encode(buffer).decode('utf-8')
-        
-        return jsonify({'image': f'data:image/jpeg;base64,{processed_image}'})
     except Exception as e:
-        print(f"Error processing frame: {e}")
+        print(f"Request handling error: {e}")
         return jsonify({'error': str(e)}), 500
 
 @app.route('/health')
