@@ -1,0 +1,6 @@
+Flask==2.0.1
+opencv-python-headless==4.8.1.78
+mediapipe==0.10.7
+numpy==1.24.3
+waitress==2.1.2
+gunicorn==20.1.0
