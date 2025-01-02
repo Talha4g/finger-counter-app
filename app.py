@@ -28,7 +28,7 @@ class FingerCounter:
         tip_ids = [4, 8, 12, 16, 20]
         fingers = []
         
-        # Thumb - different logic for left and right hands
+        # Thumb different logic for left and right hands
         if handedness.classification[0].label == 'Right':
             if hand_landmarks.landmark[tip_ids[0]].x < hand_landmarks.landmark[tip_ids[0] - 1].x:
                 fingers.append(1)
